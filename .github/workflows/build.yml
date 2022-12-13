@@ -9,4 +9,5 @@ jobs:
         with:
           node-version: '16'
       - run: make install
+      - run: make build
       - run: make lint
