@@ -2,7 +2,6 @@ import i18next from 'i18next';
 import * as yup from 'yup';
 import axios from 'axios';
 import onChange from 'on-change';
-import _ from 'lodash';
 import render, { updatePosts } from './view.js';
 import resources from './locales/index.js';
 import parse from './parser.js';
@@ -44,45 +43,26 @@ export default () => {
 
   elements.formEl.addEventListener('submit', (event) => {
     event.preventDefault();
-    const input = document.querySelector('#url-input');
-    const inputValue = input.value;
+    const formData = new FormData(event.target);
+    const inputValue = formData.get('url');
     watchedState.form.fields.url = inputValue;
+    watchedState.form.state = 'loading';
 
     schema.validate(watchedState.form.fields, { abortEarly: false })
       .then(() => {
         const { url } = watchedState.form.fields;
         axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
           .then((response) => {
-            const content = parse(response.data.contents);
-            const parserError = content.querySelector('parsererror');
-
-            if (parserError === null) {
-              const feedId = _.uniqueId();
-              const newFeed = {
-                title: content.querySelector('title').textContent.trim(),
-                description: content.querySelector('description').textContent.trim(),
-                id: feedId,
-              };
-
+            watchedState.form.state = 'loaded';
+            const newFeed = parse(response);
+            if (newFeed !== 'parse-error') {
               const urls = watchedState.urls.map((feed) => feed.url);
+
               if (!urls.includes(url)) {
+                const feedId = newFeed.id;
                 watchedState.urls.unshift({ feedId, url });
                 watchedState.feeds.unshift(newFeed);
-
-                const items = content.querySelectorAll('item');
-                const newPosts = [];
-                items.forEach((item) => {
-                  const post = {
-                    title: item.querySelector('title').textContent.trim(),
-                    description: item.querySelector('description').textContent.trim(),
-                    link: item.querySelector('link').textContent.trim(),
-                    id: _.uniqueId(),
-                    feedId,
-                  };
-
-                  newPosts.push(post);
-                });
-                watchedState.posts.unshift(...newPosts);
+                watchedState.posts.unshift(...newFeed.posts);
 
                 watchedState.form.fields.url = '';
                 watchedState.process = 'check';
@@ -102,8 +82,6 @@ export default () => {
           })
           .catch((e) => {
             if (e.name === 'TypeError') {
-              watchedState.urls.shift();
-              watchedState.feeds.shift();
               watchedState.form.state = 'filling';
               watchedState.domain.error = 'type-error';
               watchedState.domain.error = null;
