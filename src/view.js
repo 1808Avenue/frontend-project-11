@@ -109,26 +109,22 @@ export const updatePosts = (state) => {
     watchedState.urls.forEach(({ feedId, url }) => {
       axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
         .then((response) => {
-          const content = parse(response.data.contents);
-          const items = content.querySelectorAll('item');
+          const feed = parse(response);
+          console.log(watchedState);
+          const { posts } = feed;
 
           const loadedLinks = watchedState.posts.map((post) => post.link);
           const newPosts = [];
 
-          items.forEach((item) => {
-            const title = item.querySelector('title').textContent.trim();
-            const link = item.querySelector('link').textContent.trim();
-            const description = item.querySelector('description').textContent.trim();
-
-            if (!loadedLinks.includes(link)) {
+          posts.forEach((post) => {
+            if (!loadedLinks.includes(post.link)) {
               const newPost = {
-                title,
-                description,
-                link,
+                title: post.title,
+                description: post.description,
+                link: post.link,
                 id: _.uniqueId(),
                 feedId,
               };
-
               newPosts.push(newPost);
             }
           });
@@ -143,12 +139,19 @@ export const updatePosts = (state) => {
   setTimeout(() => checkNewPost(state), 5000);
 };
 
+const changeClass = (input, feedBack) => {
+  input.classList.add('is-invalid');
+  feedBack.classList.remove('text-success');
+  feedBack.classList.add('text-danger');
+};
+
 const render = (state, nextInstance) => {
   const form = document.querySelector('.rss-form');
   const input = document.querySelector('#url-input');
   const feedBack = document.querySelector('.feedback');
   const feedsContainer = document.querySelector('.feeds');
   const postsContainer = document.querySelector('.posts');
+  const buttonAdd = document.querySelector('[type="submit"]');
 
   const modalContainer = document.querySelector('.modal-content');
   const modalHeader = modalContainer.querySelector('.modal-header');
@@ -156,6 +159,11 @@ const render = (state, nextInstance) => {
   const modalBody = modalContainer.querySelector('.modal-body');
   const modalButtonRead = modalContainer.querySelector('.full-article');
 
+  if (state.form.state === 'loading') {
+    buttonAdd.setAttribute('disabled', 'disabled');
+  } else {
+    buttonAdd.removeAttribute('disabled');
+  }
   if (state.form.state === 'valid') {
     input.classList.remove('is-invalid');
     feedBack.classList.remove('text-danger');
@@ -202,35 +210,25 @@ const render = (state, nextInstance) => {
   }
 
   if (state.form.state === 'invalid') {
-    input.classList.add('is-invalid');
-    feedBack.classList.remove('text-success');
-    feedBack.classList.add('text-danger');
+    changeClass(input, feedBack);
     feedBack.textContent = nextInstance.t('form.invalid');
   }
 
   if (state.domain.error === 'duplicate') {
-    input.classList.add('is-invalid');
-    feedBack.classList.remove('text-success');
-    feedBack.classList.add('text-danger');
+    changeClass(input, feedBack);
     feedBack.textContent = nextInstance.t('domain.errors.duplicate');
   }
 
   if (state.domain.error === 'network-error') {
-    input.classList.add('is-invalid');
-    feedBack.classList.remove('text-success');
-    feedBack.classList.add('text-danger');
+    changeClass(input, feedBack);
     feedBack.textContent = nextInstance.t('domain.errors.networkError');
   }
   if (state.domain.error === 'type-error') {
-    input.classList.add('is-invalid');
-    feedBack.classList.remove('text-success');
-    feedBack.classList.add('text-danger');
+    changeClass(input, feedBack);
     feedBack.textContent = nextInstance.t('domain.errors.typeError');
   }
   if (state.domain.error === 'parse-error') {
-    input.classList.add('is-invalid');
-    feedBack.classList.remove('text-success');
-    feedBack.classList.add('text-danger');
+    changeClass(input, feedBack);
     feedBack.textContent = nextInstance.t('domain.errors.parseError');
   }
 };
