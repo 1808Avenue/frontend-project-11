@@ -1,33 +1,36 @@
-import _ from 'lodash';
-
 const parse = (response) => {
   const parser = new DOMParser();
   const content = parser.parseFromString(response.data.contents, 'text/xml');
   const parserError = content.querySelector('parsererror');
 
   if (parserError === null) {
-    const feedId = _.uniqueId();
-    const newFeed = {
-      title: content.querySelector('title').textContent.trim(),
-      description: content.querySelector('description').textContent.trim(),
-      id: feedId,
-      posts: [],
+    const title = content.querySelector('title').textContent.trim();
+    const description = content.querySelector('description').textContent.trim();
+    const feed = {
+      title,
+      description,
     };
 
     const items = content.querySelectorAll('item');
-    items.forEach((item) => {
-      const post = {
-        title: item.querySelector('title').textContent.trim(),
-        description: item.querySelector('description').textContent.trim(),
-        link: item.querySelector('link').textContent.trim(),
-        id: _.uniqueId(),
-        feedId,
+    const posts = Array.from(items).map((item) => {
+      const itemTitle = item.querySelector('title').textContent.trim();
+      const itemDescription = item.querySelector('description').textContent.trim();
+      const itemLink = item.querySelector('link').textContent.trim();
+      return {
+        title: itemTitle,
+        description: itemDescription,
+        link: itemLink,
       };
-      newFeed.posts.push(post);
     });
-    return newFeed;
+    return {
+      feed,
+      posts,
+      error: '',
+    };
   }
-  return 'parse-error';
+  return {
+    error: 'parseError',
+  };
 };
 
 export default parse;
