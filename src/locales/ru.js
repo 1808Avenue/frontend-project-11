@@ -12,8 +12,14 @@ export default {
         typeError: 'Неизвестная ошибка. Что-то пошло не так.',
       },
     },
-    buttons: {
-      view: 'Просмотр',
+    feeds: {
+      header: 'Фиды',
+    },
+    posts: {
+      header: 'Посты',
+      buttons: {
+        view: 'Просмотр',
+      },
     },
   },
 };
