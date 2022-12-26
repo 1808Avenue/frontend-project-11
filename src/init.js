@@ -1,8 +1,9 @@
 import i18next from 'i18next';
 import * as yup from 'yup';
+import _ from 'lodash';
 import axios from 'axios';
 import onChange from 'on-change';
-import render, { updatePosts } from './view.js';
+import render, { renderPosts, updatePosts } from './view.js';
 import resources from './locales/index.js';
 import parse from './parser.js';
 
@@ -19,7 +20,6 @@ export default () => {
   });
 
   const state = {
-    process: 'waiting',
     form: {
       state: 'filling',
       fields: {
@@ -36,12 +36,18 @@ export default () => {
   };
 
   const elements = {
-    formEl: document.querySelector('.rss-form'),
+    form: document.querySelector('.rss-form'),
+    postsContainer: document.querySelector('.posts'),
   };
 
-  const watchedState = onChange(state, () => render(state, i18nextInstance));
+  const watchedState = onChange(state, (path) => {
+    if (path === 'posts') {
+      renderPosts(state, elements.postsContainer, i18nextInstance);
+    }
+    render(state, i18nextInstance);
+  });
 
-  elements.formEl.addEventListener('submit', (event) => {
+  elements.form.addEventListener('submit', (event) => {
     event.preventDefault();
     const formData = new FormData(event.target);
     const inputValue = formData.get('url');
@@ -54,18 +60,26 @@ export default () => {
         axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
           .then((response) => {
             watchedState.form.state = 'loaded';
-            const newFeed = parse(response);
-            if (newFeed !== 'parse-error') {
+            const data = parse(response);
+            const newFeed = data.feed;
+            if (data.error !== 'parseError') {
               const urls = watchedState.urls.map((feed) => feed.url);
 
               if (!urls.includes(url)) {
+                newFeed.id = _.uniqueId();
                 const feedId = newFeed.id;
                 watchedState.urls.unshift({ feedId, url });
                 watchedState.feeds.unshift(newFeed);
-                watchedState.posts.unshift(...newFeed.posts);
+
+                const posts = data.posts.map((item) => {
+                  const post = item;
+                  post.id = _.uniqueId();
+                  post.feedId = feedId;
+                  return post;
+                });
+                watchedState.posts.unshift(...posts);
 
                 watchedState.form.fields.url = '';
-                watchedState.process = 'check';
                 watchedState.form.state = 'valid';
               } else {
                 watchedState.form.state = 'filling';
@@ -73,7 +87,7 @@ export default () => {
               }
             } else {
               watchedState.form.state = 'filling';
-              watchedState.domain.error = 'parse-error';
+              watchedState.domain.error = 'parseError';
             }
           })
           .then(() => {
@@ -83,11 +97,11 @@ export default () => {
           .catch((e) => {
             if (e.name === 'TypeError') {
               watchedState.form.state = 'filling';
-              watchedState.domain.error = 'type-error';
+              watchedState.domain.error = 'typeError';
               watchedState.domain.error = null;
             } else {
               watchedState.form.state = 'filling';
-              watchedState.domain.error = 'network-error';
+              watchedState.domain.error = 'networkError';
               watchedState.domain.error = null;
             }
           });
