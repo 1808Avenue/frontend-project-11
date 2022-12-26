@@ -2,7 +2,7 @@ import axios from 'axios';
 import _ from 'lodash';
 import parse from './parser.js';
 
-const renderFeeds = (state, container) => {
+const renderFeeds = (state, container, nextInstance) => {
   const { feeds } = state;
   const feedsContainer = container;
   feedsContainer.innerHTML = '';
@@ -15,7 +15,7 @@ const renderFeeds = (state, container) => {
 
   const h2 = document.createElement('h2');
   h2.classList.add('card-title', 'h4');
-  h2.textContent = 'Фиды';
+  h2.textContent = nextInstance.t('feeds.header');
 
   const ul = document.createElement('ul');
   ul.classList.add('list-group', 'border-0', 'rounded-0');
@@ -44,7 +44,7 @@ const renderFeeds = (state, container) => {
   container.append(divCardBorder);
 };
 
-const renderPosts = (state, container, nextInstance) => {
+export const renderPosts = (state, container, nextInstance) => {
   const { posts } = state;
   const postsContainer = container;
   postsContainer.innerHTML = '';
@@ -57,7 +57,7 @@ const renderPosts = (state, container, nextInstance) => {
 
   const h2 = document.createElement('h2');
   h2.classList.add('card-title', 'h4');
-  h2.textContent = 'Посты';
+  h2.textContent = nextInstance.t('posts.header');
 
   const ul = document.createElement('ul');
   ul.classList.add('list-group', 'border-0', 'rounded-0');
@@ -91,7 +91,7 @@ const renderPosts = (state, container, nextInstance) => {
     button.setAttribute('data-id', dataId);
     button.setAttribute('data-bs-toggle', 'modal');
     button.setAttribute('data-bs-target', '#modal');
-    button.textContent = nextInstance.t('buttons.view');
+    button.textContent = nextInstance.t('posts.buttons.view');
 
     li.append(a);
     li.append(button);
@@ -109,9 +109,10 @@ export const updatePosts = (state) => {
     watchedState.urls.forEach(({ feedId, url }) => {
       axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
         .then((response) => {
-          const feed = parse(response);
-          console.log(watchedState);
-          const { posts } = feed;
+          const data = parse(response);
+          const { feed } = data;
+          const { posts } = data;
+          feed.id = feedId;
 
           const loadedLinks = watchedState.posts.map((post) => post.link);
           const newPosts = [];
@@ -139,12 +140,6 @@ export const updatePosts = (state) => {
   setTimeout(() => checkNewPost(state), 5000);
 };
 
-const changeClass = (input, feedBack) => {
-  input.classList.add('is-invalid');
-  feedBack.classList.remove('text-success');
-  feedBack.classList.add('text-danger');
-};
-
 const render = (state, nextInstance) => {
   const form = document.querySelector('.rss-form');
   const input = document.querySelector('#url-input');
@@ -159,78 +154,72 @@ const render = (state, nextInstance) => {
   const modalBody = modalContainer.querySelector('.modal-body');
   const modalButtonRead = modalContainer.querySelector('.full-article');
 
+  const errorHandler = (errorText) => {
+    input.classList.add('is-invalid');
+    feedBack.classList.remove('text-success');
+    feedBack.classList.add('text-danger');
+    feedBack.textContent = errorText;
+  };
+
   if (state.form.state === 'loading') {
     buttonAdd.setAttribute('disabled', 'disabled');
   } else {
     buttonAdd.removeAttribute('disabled');
   }
+
   if (state.form.state === 'valid') {
     input.classList.remove('is-invalid');
     feedBack.classList.remove('text-danger');
     feedBack.classList.add('text-success');
     feedBack.textContent = nextInstance.t('form.valid');
     form.reset();
-    renderFeeds(state, feedsContainer);
-  }
-
-  if (state.process === 'check') {
-    renderPosts(state, postsContainer, nextInstance);
-
-    const postElements = postsContainer.querySelectorAll('li');
-    postElements.forEach((postElement) => {
-      const aElement = postElement.querySelector('a');
-      const buttonElement = postElement.querySelector('button');
-      const postId = aElement.dataset.id;
-      const post = state.posts
-        .filter((currentPost) => currentPost.id === postId)
-        .reduce((acc, currentPost) => {
-          acc.title = currentPost.title;
-          acc.description = currentPost.description;
-          acc.link = currentPost.link;
-          acc.id = currentPost.id;
-          acc.feedId = currentPost.feedId;
-          return acc;
-        }, {});
-
-      postElement.addEventListener('click', (event) => {
-        const { target } = event;
-        if (target.nodeName === 'A' || target.nodeName === 'BUTTON') {
-          aElement.classList.remove('fw-bold');
-          aElement.classList.add('fw-normal', 'link-secondary');
-          state.postsRead.push(post);
-        }
-      });
-
-      buttonElement.addEventListener('click', () => {
-        modalTitle.textContent = post.title;
-        modalBody.textContent = post.description;
-        modalButtonRead.href = post.link;
-      });
-    });
+    renderFeeds(state, feedsContainer, nextInstance);
   }
 
   if (state.form.state === 'invalid') {
-    changeClass(input, feedBack);
+    input.classList.add('is-invalid');
+    feedBack.classList.remove('text-success');
+    feedBack.classList.add('text-danger');
     feedBack.textContent = nextInstance.t('form.invalid');
   }
 
-  if (state.domain.error === 'duplicate') {
-    changeClass(input, feedBack);
-    feedBack.textContent = nextInstance.t('domain.errors.duplicate');
+  if (state.domain.error !== null) {
+    const errorName = state.domain.error;
+    const errorText = nextInstance.t(`domain.errors.${errorName}`);
+    errorHandler(errorText);
   }
 
-  if (state.domain.error === 'network-error') {
-    changeClass(input, feedBack);
-    feedBack.textContent = nextInstance.t('domain.errors.networkError');
-  }
-  if (state.domain.error === 'type-error') {
-    changeClass(input, feedBack);
-    feedBack.textContent = nextInstance.t('domain.errors.typeError');
-  }
-  if (state.domain.error === 'parse-error') {
-    changeClass(input, feedBack);
-    feedBack.textContent = nextInstance.t('domain.errors.parseError');
-  }
+  const postElements = postsContainer.querySelectorAll('li');
+  postElements.forEach((postElement) => {
+    const aElement = postElement.querySelector('a');
+    const buttonElement = postElement.querySelector('button');
+    const postId = aElement.dataset.id;
+    const post = state.posts
+      .filter((currentPost) => currentPost.id === postId)
+      .reduce((acc, currentPost) => {
+        acc.title = currentPost.title;
+        acc.description = currentPost.description;
+        acc.link = currentPost.link;
+        acc.id = currentPost.id;
+        acc.feedId = currentPost.feedId;
+        return acc;
+      }, {});
+
+    postElement.addEventListener('click', (event) => {
+      const { target } = event;
+      if (target.nodeName === 'A' || target.nodeName === 'BUTTON') {
+        aElement.classList.remove('fw-bold');
+        aElement.classList.add('fw-normal', 'link-secondary');
+        state.postsRead.push({ id: post.id, feedId: post.feedId });
+      }
+    });
+
+    buttonElement.addEventListener('click', () => {
+      modalTitle.textContent = post.title;
+      modalBody.textContent = post.description;
+      modalButtonRead.href = post.link;
+    });
+  });
 };
 
 export default render;
