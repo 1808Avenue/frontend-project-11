@@ -3,13 +3,21 @@ import * as yup from 'yup';
 import _ from 'lodash';
 import axios from 'axios';
 import onChange from 'on-change';
-import render, { renderPosts, updatePosts } from './view.js';
+import render, {
+  renderModal, renderPosts, renderReadPosts, updatePosts,
+} from './view.js';
 import resources from './locales/index.js';
 import parse from './parser.js';
 
-const schema = yup.object().shape({
-  url: yup.string().url(),
-});
+const validate = (watchedState) => {
+  const { fields } = watchedState.form;
+  const urls = watchedState.urls.map((feed) => feed.url);
+
+  const schema = yup.object().shape({
+    url: yup.string().url().notOneOf(urls),
+  });
+  return schema.validate(fields, { abortEarly: false });
+};
 
 export default () => {
   const i18nextInstance = i18next.createInstance();
@@ -21,14 +29,15 @@ export default () => {
 
   const state = {
     form: {
-      state: 'filling',
+      status: 'filling',
       fields: {
         url: '',
       },
     },
     domain: {
-      error: null,
+      error: '',
     },
+    modal: [],
     urls: [],
     feeds: [],
     posts: [],
@@ -38,13 +47,20 @@ export default () => {
   const elements = {
     form: document.querySelector('.rss-form'),
     postsContainer: document.querySelector('.posts'),
+    modalContainer: document.querySelector('.modal-content'),
   };
 
   const watchedState = onChange(state, (path) => {
     if (path === 'posts') {
-      renderPosts(state, elements.postsContainer, i18nextInstance);
+      renderPosts(watchedState, elements.postsContainer, i18nextInstance);
     }
-    render(state, i18nextInstance);
+    if (path === 'postsRead') {
+      renderReadPosts(watchedState, elements.postsContainer);
+    }
+    if (path === 'modal') {
+      renderModal(watchedState, elements.modalContainer);
+    }
+    render(watchedState, i18nextInstance);
   });
 
   elements.form.addEventListener('submit', (event) => {
@@ -52,62 +68,56 @@ export default () => {
     const formData = new FormData(event.target);
     const inputValue = formData.get('url');
     watchedState.form.fields.url = inputValue;
-    watchedState.form.state = 'loading';
+    watchedState.form.status = 'filling';
+    watchedState.domain.error = '';
 
-    schema.validate(watchedState.form.fields, { abortEarly: false })
+    validate(watchedState)
       .then(() => {
+        watchedState.form.status = 'loading';
         const { url } = watchedState.form.fields;
         axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
           .then((response) => {
-            watchedState.form.state = 'loaded';
+            watchedState.form.status = 'loaded';
             const data = parse(response);
             const newFeed = data.feed;
             if (data.error !== 'parseError') {
-              const urls = watchedState.urls.map((feed) => feed.url);
+              newFeed.id = _.uniqueId();
+              const feedId = newFeed.id;
+              watchedState.urls.unshift({ feedId, url });
+              watchedState.feeds.unshift(newFeed);
 
-              if (!urls.includes(url)) {
-                newFeed.id = _.uniqueId();
-                const feedId = newFeed.id;
-                watchedState.urls.unshift({ feedId, url });
-                watchedState.feeds.unshift(newFeed);
+              const posts = data.posts.map((item) => {
+                const post = item;
+                post.id = _.uniqueId();
+                post.feedId = feedId;
+                return post;
+              });
+              watchedState.posts.unshift(...posts);
 
-                const posts = data.posts.map((item) => {
-                  const post = item;
-                  post.id = _.uniqueId();
-                  post.feedId = feedId;
-                  return post;
-                });
-                watchedState.posts.unshift(...posts);
-
-                watchedState.form.fields.url = '';
-                watchedState.form.state = 'valid';
-              } else {
-                watchedState.form.state = 'filling';
-                watchedState.domain.error = 'duplicate';
-              }
+              watchedState.form.fields.url = '';
+              watchedState.form.status = 'valid';
             } else {
-              watchedState.form.state = 'filling';
               watchedState.domain.error = 'parseError';
             }
           })
           .then(() => {
-            watchedState.form.state = 'filling';
-            watchedState.domain.error = null;
+            watchedState.form.status = 'filling';
+            watchedState.domain.error = '';
           })
           .catch((e) => {
             if (e.name === 'TypeError') {
-              watchedState.form.state = 'filling';
               watchedState.domain.error = 'typeError';
-              watchedState.domain.error = null;
             } else {
-              watchedState.form.state = 'filling';
               watchedState.domain.error = 'networkError';
-              watchedState.domain.error = null;
             }
           });
       })
-      .catch(() => {
-        watchedState.form.state = 'invalid';
+      .catch((e) => {
+        if (e.message === 'url must be a valid URL') {
+          watchedState.form.status = 'invalid';
+        } else {
+          watchedState.domain.error = 'duplicate';
+        }
       });
   });
 
