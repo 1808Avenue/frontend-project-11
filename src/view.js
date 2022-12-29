@@ -2,8 +2,8 @@ import axios from 'axios';
 import _ from 'lodash';
 import parse from './parser.js';
 
-const renderFeeds = (state, container, nextInstance) => {
-  const { feeds } = state;
+const renderFeeds = (watchedState, container, nextInstance) => {
+  const { feeds } = watchedState;
   const feedsContainer = container;
   feedsContainer.innerHTML = '';
 
@@ -44,8 +44,8 @@ const renderFeeds = (state, container, nextInstance) => {
   container.append(divCardBorder);
 };
 
-export const renderPosts = (state, container, nextInstance) => {
-  const { posts } = state;
+export const renderPosts = (watchedState, container, nextInstance) => {
+  const { posts } = watchedState;
   const postsContainer = container;
   postsContainer.innerHTML = '';
 
@@ -62,7 +62,7 @@ export const renderPosts = (state, container, nextInstance) => {
   const ul = document.createElement('ul');
   ul.classList.add('list-group', 'border-0', 'rounded-0');
 
-  const postReadIds = state.postsRead.map((postRead) => postRead.id);
+  const postReadIds = watchedState.postsRead.map((postRead) => postRead.id);
 
   posts.forEach((post) => {
     const { title } = post;
@@ -104,55 +104,73 @@ export const renderPosts = (state, container, nextInstance) => {
   container.append(divCardBorder);
 };
 
-export const updatePosts = (state) => {
-  const checkNewPost = (watchedState) => {
-    watchedState.urls.forEach(({ feedId, url }) => {
-      axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
-        .then((response) => {
-          const data = parse(response);
-          const { feed } = data;
-          const { posts } = data;
-          feed.id = feedId;
-
-          const loadedLinks = watchedState.posts.map((post) => post.link);
-          const newPosts = [];
-
-          posts.forEach((post) => {
-            if (!loadedLinks.includes(post.link)) {
-              const newPost = {
-                title: post.title,
-                description: post.description,
-                link: post.link,
-                id: _.uniqueId(),
-                feedId,
-              };
-              newPosts.push(newPost);
-            }
-          });
-          if (newPosts.length !== 0) {
-            watchedState.posts.unshift(...newPosts);
-          }
-        });
-    });
-    updatePosts(watchedState);
-  };
-
-  setTimeout(() => checkNewPost(state), 5000);
+export const renderReadPosts = (watchedState, container) => {
+  watchedState.postsRead.forEach((postRead) => {
+    const { id } = postRead;
+    const aElement = container.querySelector(`[data-id="${id}"]`);
+    aElement.classList.remove('fw-bold');
+    aElement.classList.add('fw-normal', 'link-secondary');
+  });
 };
 
-const render = (state, nextInstance) => {
+export const renderModal = (watchedState, container) => {
+  const modalTitle = container.querySelector('.modal-title');
+  const modalBody = container.querySelector('.modal-body');
+  const modalButtonRead = container.querySelector('.full-article');
+  const postData = watchedState.modal.reduce((acc, data) => {
+    acc.title = data.title;
+    acc.description = data.description;
+    acc.link = data.link;
+    return acc;
+  }, {});
+  const { title, description, link } = postData;
+
+  modalTitle.textContent = title;
+  modalBody.textContent = description;
+  modalButtonRead.href = link;
+};
+
+export const updatePosts = (watchedState) => {
+  const timeOut = 5000;
+  const promises = watchedState.urls
+    .map(({ feedId, url }) => axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
+      .then((response) => {
+        const data = parse(response);
+        const { feed } = data;
+        const { posts } = data;
+        feed.id = feedId;
+
+        const loadedLinks = watchedState.posts.map((post) => post.link);
+        const newPosts = [];
+
+        posts.forEach((post) => {
+          if (!loadedLinks.includes(post.link)) {
+            const newPost = {
+              title: post.title,
+              description: post.description,
+              link: post.link,
+              id: _.uniqueId(),
+              feedId,
+            };
+            newPosts.push(newPost);
+          }
+        });
+        if (newPosts.length !== 0) {
+          watchedState.posts.unshift(...newPosts);
+        }
+        return response;
+      })
+      .catch(console.log));
+  Promise.all(promises).finally(() => setTimeout(() => updatePosts(watchedState), timeOut));
+};
+
+const render = (watchedState, nextInstance) => {
   const form = document.querySelector('.rss-form');
   const input = document.querySelector('#url-input');
   const feedBack = document.querySelector('.feedback');
   const feedsContainer = document.querySelector('.feeds');
   const postsContainer = document.querySelector('.posts');
   const buttonAdd = document.querySelector('[type="submit"]');
-
-  const modalContainer = document.querySelector('.modal-content');
-  const modalHeader = modalContainer.querySelector('.modal-header');
-  const modalTitle = modalHeader.querySelector('.modal-title');
-  const modalBody = modalContainer.querySelector('.modal-body');
-  const modalButtonRead = modalContainer.querySelector('.full-article');
 
   const errorHandler = (errorText) => {
     input.classList.add('is-invalid');
@@ -161,30 +179,30 @@ const render = (state, nextInstance) => {
     feedBack.textContent = errorText;
   };
 
-  if (state.form.state === 'loading') {
+  if (watchedState.form.status === 'loading') {
     buttonAdd.setAttribute('disabled', 'disabled');
   } else {
     buttonAdd.removeAttribute('disabled');
   }
 
-  if (state.form.state === 'valid') {
+  if (watchedState.form.status === 'valid') {
     input.classList.remove('is-invalid');
     feedBack.classList.remove('text-danger');
     feedBack.classList.add('text-success');
     feedBack.textContent = nextInstance.t('form.valid');
     form.reset();
-    renderFeeds(state, feedsContainer, nextInstance);
+    renderFeeds(watchedState, feedsContainer, nextInstance);
   }
 
-  if (state.form.state === 'invalid') {
+  if (watchedState.form.status === 'invalid') {
     input.classList.add('is-invalid');
     feedBack.classList.remove('text-success');
     feedBack.classList.add('text-danger');
     feedBack.textContent = nextInstance.t('form.invalid');
   }
 
-  if (state.domain.error !== null) {
-    const errorName = state.domain.error;
+  if (watchedState.domain.error !== '') {
+    const errorName = watchedState.domain.error;
     const errorText = nextInstance.t(`domain.errors.${errorName}`);
     errorHandler(errorText);
   }
@@ -194,7 +212,7 @@ const render = (state, nextInstance) => {
     const aElement = postElement.querySelector('a');
     const buttonElement = postElement.querySelector('button');
     const postId = aElement.dataset.id;
-    const post = state.posts
+    const post = watchedState.posts
       .filter((currentPost) => currentPost.id === postId)
       .reduce((acc, currentPost) => {
         acc.title = currentPost.title;
@@ -208,16 +226,21 @@ const render = (state, nextInstance) => {
     postElement.addEventListener('click', (event) => {
       const { target } = event;
       if (target.nodeName === 'A' || target.nodeName === 'BUTTON') {
-        aElement.classList.remove('fw-bold');
-        aElement.classList.add('fw-normal', 'link-secondary');
-        state.postsRead.push({ id: post.id, feedId: post.feedId });
+        const readPostIds = watchedState.postsRead.map((postRead) => postRead.id);
+        if (!readPostIds.includes(post.id)) {
+          watchedState.postsRead.push({ id: post.id, feedId: post.feedId });
+        }
       }
     });
 
     buttonElement.addEventListener('click', () => {
-      modalTitle.textContent = post.title;
-      modalBody.textContent = post.description;
-      modalButtonRead.href = post.link;
+      const { title, description, link } = post;
+      const postData = {
+        title,
+        description,
+        link,
+      };
+      watchedState.modal.splice(0, 1, postData);
     });
   });
 };
