@@ -25,12 +25,9 @@ const parse = (response) => {
     return {
       feed,
       posts,
-      error: '',
     };
   }
-  return {
-    error: 'parseError',
-  };
+  throw new Error('parseError');
 };
 
 export default parse;
