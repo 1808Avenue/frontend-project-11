@@ -9,12 +9,9 @@ import render, {
 import resources from './locales/index.js';
 import parse from './parser.js';
 
-const validate = (watchedState) => {
-  const { fields } = watchedState.form;
-  const urls = watchedState.urls.map((feed) => feed.url);
-
+const validate = (fields, notOneOf) => {
   const schema = yup.object().shape({
-    url: yup.string().url().notOneOf(urls),
+    url: yup.string().url().notOneOf(notOneOf),
   });
   return schema.validate(fields, { abortEarly: false });
 };
@@ -28,8 +25,9 @@ export default () => {
   });
 
   const state = {
+    process: 'waiting',
     form: {
-      status: 'filling',
+      status: '',
       fields: {
         url: '',
       },
@@ -67,56 +65,69 @@ export default () => {
     event.preventDefault();
     const formData = new FormData(event.target);
     const inputValue = formData.get('url');
+    const urls = watchedState.urls.map((feed) => feed.url);
     watchedState.form.fields.url = inputValue;
+    watchedState.process = 'adding';
     watchedState.form.status = 'filling';
     watchedState.domain.error = '';
 
-    validate(watchedState)
+    validate(watchedState.form.fields, urls)
       .then(() => {
-        watchedState.form.status = 'loading';
+        watchedState.process = 'loading';
         const { url } = watchedState.form.fields;
         axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
           .then((response) => {
-            watchedState.form.status = 'loaded';
+            watchedState.process = 'loaded';
             const data = parse(response);
+
             const newFeed = data.feed;
-            if (data.error !== 'parseError') {
-              newFeed.id = _.uniqueId();
-              const feedId = newFeed.id;
-              watchedState.urls.unshift({ feedId, url });
-              watchedState.feeds.unshift(newFeed);
+            newFeed.id = _.uniqueId();
+            const feedId = newFeed.id;
+            watchedState.urls.unshift({ feedId, url });
+            watchedState.feeds.unshift(newFeed);
 
-              const posts = data.posts.map((item) => {
-                const post = item;
-                post.id = _.uniqueId();
-                post.feedId = feedId;
-                return post;
-              });
-              watchedState.posts.unshift(...posts);
+            const posts = data.posts.map((item) => {
+              const post = item;
+              post.id = _.uniqueId();
+              post.feedId = feedId;
+              return post;
+            });
+            watchedState.posts.unshift(...posts);
 
-              watchedState.form.fields.url = '';
-              watchedState.form.status = 'valid';
-            } else {
-              watchedState.domain.error = 'parseError';
-            }
+            watchedState.form.fields.url = '';
+            watchedState.form.status = 'valid';
+            watchedState.process = 'success';
           })
           .then(() => {
-            watchedState.form.status = 'filling';
-            watchedState.domain.error = '';
+            watchedState.process = 'waiting';
           })
           .catch((e) => {
             if (e.name === 'TypeError') {
               watchedState.domain.error = 'typeError';
-            } else {
+              watchedState.form.status = 'invalid';
+              watchedState.process = 'failing';
+            }
+            if (e.message === 'parseError') {
+              watchedState.domain.error = 'parseError';
+              watchedState.form.status = 'invalid';
+              watchedState.process = 'failing';
+            }
+            if (e.message === 'Network Error') {
               watchedState.domain.error = 'networkError';
+              watchedState.form.status = 'invalid';
+              watchedState.process = 'failing';
             }
           });
       })
       .catch((e) => {
         if (e.message === 'url must be a valid URL') {
+          watchedState.domain.error = 'validationError';
           watchedState.form.status = 'invalid';
+          watchedState.process = 'failing';
         } else {
-          watchedState.domain.error = 'duplicate';
+          watchedState.domain.error = 'duplicateError';
+          watchedState.form.status = 'invalid';
+          watchedState.process = 'failing';
         }
       });
   });
