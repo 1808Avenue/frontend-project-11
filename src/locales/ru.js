@@ -2,11 +2,11 @@ export default {
   translation: {
     form: {
       valid: 'RSS успешно загружен',
-      invalid: 'Ссылка должна быть валидным URL',
     },
     domain: {
       errors: {
-        duplicate: 'RSS уже существует',
+        validationError: 'Ссылка должна быть валидным URL',
+        duplicateError: 'RSS уже существует',
         parseError: 'Ресурс не содержит валидный RSS',
         networkError: 'Ошибка сети',
         typeError: 'Неизвестная ошибка. Что-то пошло не так.',
