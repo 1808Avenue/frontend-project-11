@@ -179,13 +179,13 @@ const render = (watchedState, nextInstance) => {
     feedBack.textContent = errorText;
   };
 
-  if (watchedState.form.status === 'loading') {
+  if (watchedState.process === 'loading') {
     buttonAdd.setAttribute('disabled', 'disabled');
   } else {
     buttonAdd.removeAttribute('disabled');
   }
 
-  if (watchedState.form.status === 'valid') {
+  if (watchedState.process === 'success') {
     input.classList.remove('is-invalid');
     feedBack.classList.remove('text-danger');
     feedBack.classList.add('text-success');
@@ -194,14 +194,7 @@ const render = (watchedState, nextInstance) => {
     renderFeeds(watchedState, feedsContainer, nextInstance);
   }
 
-  if (watchedState.form.status === 'invalid') {
-    input.classList.add('is-invalid');
-    feedBack.classList.remove('text-success');
-    feedBack.classList.add('text-danger');
-    feedBack.textContent = nextInstance.t('form.invalid');
-  }
-
-  if (watchedState.domain.error !== '') {
+  if (watchedState.process === 'failing') {
     const errorName = watchedState.domain.error;
     const errorText = nextInstance.t(`domain.errors.${errorName}`);
     errorHandler(errorText);
